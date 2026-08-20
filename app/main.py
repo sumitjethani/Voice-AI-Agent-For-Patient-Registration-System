@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from .database import Base, engine
 from .routes.patients import router as patients_router
-
+from .routes.vapi import router as vapi_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,7 +21,7 @@ app = FastAPI(
 )
 
 app.include_router(patients_router)
-
+app.include_router(vapi_router)
 
 @app.get("/health")
 def health():
