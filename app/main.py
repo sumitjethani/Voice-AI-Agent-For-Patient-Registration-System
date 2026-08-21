@@ -116,7 +116,7 @@ def voice_demo():
         let isCalling = false;
 
         try {
-          const vapi = new Vapi("22c0a6ac-e928-4f48-9a87-00164b08d0e6");
+          const vapi = new Vapi("a0864276-0f81-4d1c-b2ff-60fa8f61d9de");
           status.innerText = "Status: Ready to call";
 
           vapi.on("call-start", () => {
