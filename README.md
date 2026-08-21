@@ -15,21 +15,23 @@ A production-ready, HIPAA-conscious voice agent and REST API system designed to 
 
 ## System Architecture & Workflow
 
-Caller (Phone / WebRTC)
-│
-▼
-┌──────────────┐       Webhook Tool Calls       ┌────────────────────────┐
-│   Vapi.ai    │ ─────────────────────────────► │     FastAPI Server     │
-│ (Voice Agent)│ ◄───────────────────────────── │(Railway Cloud Platform)│
-└──────────────┘         JSON Response          └───────────┬────────────┘
-│
-SQLAlchemy ORM
-│
-▼
-┌────────────────────────┐
-│   SQLite / DB Store    │
-│ (Persistent Records)   │
-└────────────────────────┘
+```text
+ Caller (Phone / WebRTC) 
+         │
+         ▼
+ ┌──────────────┐       Webhook Tool Calls       ┌────────────────────────┐
+ │   Vapi.ai    │ ─────────────────────────────► │     FastAPI Server     │
+ │ (Voice Agent)│ ◄───────────────────────────── │(Railway Cloud Platform)│
+ └──────────────┘         JSON Response          └───────────┬────────────┘
+                                                             │
+                                                     SQLAlchemy ORM
+                                                             │
+                                                             ▼
+                                                 ┌────────────────────────┐
+                                                 │   SQLite / DB Store    │
+                                                 │ (Persistent Records)   │
+                                                 └────────────────────────┘
+```
 
 
 ### Conversational Lifecycle
@@ -154,7 +156,9 @@ Open https://voicepatient.up.railway.app/docs.
 
 Execute GET /patients to confirm the voice-registered patient has persisted to the database.
 
-Repository Structure
+## Repository Structure
+
+```text
 ├── app/
 │   ├── __init__.py
 │   ├── main.py              # Application entry point, lifespan, & /demo route
@@ -177,3 +181,4 @@ Repository Structure
 ├── requirements.txt         # Production & testing dependencies
 ├── Procfile                 # Deployment process command for Railway
 └── README.md                # Project documentation
+```
