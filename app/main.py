@@ -89,57 +89,73 @@ def voice_demo():
           width: 100%;
         }
         #call-btn:hover { background: #059669; }
+        #call-btn:disabled { background: #64748b; cursor: not-allowed; }
         #status {
           margin-top: 1rem;
           font-size: 0.85rem;
           color: #cbd5e1;
           font-family: monospace;
+          word-break: break-word;
         }
       </style>
     </head>
     <body>
       <div class="card">
         <h1>🎙️ Voice Patient Registration</h1>
-        <p>Click below to start a live voice session with the AI agent directly from your browser.</p>
+        <p>Click below to start a live voice intake session directly from your browser.</p>
         <button id="call-btn">Start Voice Call</button>
-        <div id="status">Status: Ready</div>
+        <div id="status">Status: Initializing Voice SDK...</div>
       </div>
 
-      <script src="https://unpkg.com/@vapi-ai/web/dist/vapi.js"></script>
-      <script>
-        const vapi = new Vapi("22c0a6ac-e928-4f48-9a87-00164b08d0e6");
+      <!-- Native ESM Module Import -->
+      <script type="module">
+        import Vapi from "https://esm.sh/@vapi-ai/web";
+
         const btn = document.getElementById("call-btn");
         const status = document.getElementById("status");
         let isCalling = false;
 
-        btn.onclick = () => {
-          if (!isCalling) {
-            status.innerText = "Status: Connecting...";
-            vapi.start("d5900e36-a37c-43e9-b76b-896bbfaf9f75");
-          } else {
-            status.innerText = "Status: Ending call...";
-            vapi.stop();
-          }
-        };
+        try {
+          const vapi = new Vapi("22c0a6ac-e928-4f48-9a87-00164b08d0e6");
+          status.innerText = "Status: Ready to call";
 
-        vapi.on("call-start", () => {
-          isCalling = true;
-          btn.innerText = "End Call";
-          btn.style.background = "#ef4444";
-          status.innerText = "Status: 🟢 Call Active (Speak into microphone)";
-        });
+          vapi.on("call-start", () => {
+            isCalling = true;
+            btn.innerText = "End Call";
+            btn.style.background = "#ef4444";
+            status.innerText = "Status: 🟢 Connected! Speak into your microphone.";
+          });
 
-        vapi.on("call-end", () => {
-          isCalling = false;
-          btn.innerText = "Start Voice Call";
-          btn.style.background = "#10b981";
-          status.innerText = "Status: ⚪ Call Ended";
-        });
+          vapi.on("call-end", () => {
+            isCalling = false;
+            btn.innerText = "Start Voice Call";
+            btn.style.background = "#10b981";
+            status.innerText = "Status: ⚪ Call Ended";
+          });
 
-        vapi.on("error", (e) => {
-          console.error(e);
-          status.innerText = "Status: ⚠️ Error connecting. Check console.";
-        });
+          vapi.on("error", (err) => {
+            console.error("Vapi Runtime Error:", err);
+            status.innerText = "Status: ⚠️ Error: " + (err.message || JSON.stringify(err));
+          });
+
+          btn.onclick = async () => {
+            if (!isCalling) {
+              try {
+                status.innerText = "Status: Requesting mic & connecting...";
+                await vapi.start("d5900e36-a37c-43e9-b76b-896bbfaf9f75");
+              } catch (e) {
+                console.error("Call start exception:", e);
+                status.innerText = "Status: ⚠️ Failed to connect: " + e.message;
+              }
+            } else {
+              status.innerText = "Status: Disconnecting...";
+              vapi.stop();
+            }
+          };
+        } catch (initErr) {
+          console.error("SDK Init Error:", initErr);
+          status.innerText = "Status: ⚠️ Failed to initialize SDK: " + initErr.message;
+        }
       </script>
     </body>
     </html>
