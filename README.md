@@ -10,7 +10,6 @@ A production-ready, HIPAA-conscious voice agent and REST API system designed to 
 * **Interactive Web Voice Demo:** [https://voicepatient.up.railway.app/demo](https://voicepatient.up.railway.app/demo) *(Direct in-browser WebRTC voice test)*
 * **Interactive API Documentation (Swagger UI):** [https://voicepatient.up.railway.app/docs](https://voicepatient.up.railway.app/docs)
 * **Production API Base URL:** [https://voicepatient.up.railway.app](https://voicepatient.up.railway.app)
-* **Vapi Assistant ID:** `d5900e36-a37c-43e9-b76b-896bbfaf9f75`
 
 ---
 
