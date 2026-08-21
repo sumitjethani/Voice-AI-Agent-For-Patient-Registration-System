@@ -4,7 +4,7 @@ from uuid import UUID
 
 from dateutil import parser as date_parser
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -27,10 +27,6 @@ def parse_flexible_date(val: Any) -> Optional[date]:
         return date_parser.parse(str(val)).date()
     except Exception:
         return None
-
-
-class VapiCheckPatientRequest(BaseModel):
-    phone_number: str
 
 
 class VapiCreatePatientRequest(BaseModel):
@@ -56,9 +52,11 @@ class VapiCreatePatientRequest(BaseModel):
 async def check_patient(request: Request, db: Session = Depends(get_db)):
     body = await request.json()
 
-    # Handle direct payload or nested Vapi tool call payload
-    if "message" in body and "toolCalls" in body["message"]:
-        args = body["message"]["toolCalls"][0]["function"]["arguments"]
+    tool_call_id = None
+    if "message" in body and "toolCalls" in body["message"] and len(body["message"]["toolCalls"]) > 0:
+        tool_call = body["message"]["toolCalls"][0]
+        tool_call_id = tool_call.get("id")
+        args = tool_call["function"]["arguments"]
         phone_input = args.get("phone_number", "")
     else:
         phone_input = body.get("phone_number", "")
@@ -66,77 +64,69 @@ async def check_patient(request: Request, db: Session = Depends(get_db)):
     digits = "".join(ch for ch in str(phone_input) if ch.isdigit())
 
     if len(digits) < 10:
-        return {
-            "found": False,
-            "patient": None,
-            "error": "Invalid phone number",
-        }
-
-    # Match last 10 digits
-    lookup_digits = digits[-10:]
-
-    patient = db.scalar(
-        select(Patient).where(
-            Patient.phone_number.endswith(lookup_digits),
-            Patient.deleted_at.is_(None),
+        res_data = {"found": False, "patient": None, "error": "Invalid phone number"}
+    else:
+        lookup_digits = digits[-10:]
+        patient = db.scalar(
+            select(Patient).where(
+                Patient.phone_number.endswith(lookup_digits),
+                Patient.deleted_at.is_(None),
+            )
         )
-    )
+        if not patient:
+            res_data = {"found": False, "patient": None, "error": None}
+        else:
+            res_data = {
+                "found": True,
+                "patient": {
+                    "patient_id": str(patient.patient_id),
+                    "first_name": patient.first_name,
+                    "last_name": patient.last_name,
+                    "phone_number": patient.phone_number,
+                },
+                "error": None,
+            }
 
-    if not patient:
-        return {
-            "found": False,
-            "patient": None,
-            "error": None,
-        }
-
-    return {
-        "found": True,
-        "patient": {
-            "patient_id": str(patient.patient_id),
-            "first_name": patient.first_name,
-            "last_name": patient.last_name,
-            "phone_number": patient.phone_number,
-        },
-        "error": None,
-    }
+    if tool_call_id:
+        return {"results": [{"toolCallId": tool_call_id, "result": res_data}]}
+    return res_data
 
 
 @router.post("/create-patient")
 async def create_patient(request: Request, db: Session = Depends(get_db)):
     body = await request.json()
 
-    # Extract args if wrapped inside Vapi tool call
-    if "message" in body and "toolCalls" in body["message"]:
-        payload_data = body["message"]["toolCalls"][0]["function"]["arguments"]
+    tool_call_id = None
+    if "message" in body and "toolCalls" in body["message"] and len(body["message"]["toolCalls"]) > 0:
+        tool_call = body["message"]["toolCalls"][0]
+        tool_call_id = tool_call.get("id")
+        payload_data = tool_call["function"]["arguments"]
     else:
         payload_data = body
 
     try:
         data = VapiCreatePatientRequest(**payload_data)
     except Exception as e:
-        return {
-            "success": False,
-            "patient": None,
-            "error": f"Validation error: {str(e)}",
-        }
+        res_data = {"success": False, "patient": None, "error": f"Validation error: {str(e)}"}
+        if tool_call_id:
+            return {"results": [{"toolCallId": tool_call_id, "result": res_data}]}
+        return res_data
 
     digits = "".join(ch for ch in str(data.phone_number) if ch.isdigit())
     if len(digits) < 10:
-        return {
-            "success": False,
-            "patient": None,
-            "error": "Phone number must contain at least 10 digits.",
-        }
+        res_data = {"success": False, "patient": None, "error": "Phone number must contain at least 10 digits."}
+        if tool_call_id:
+            return {"results": [{"toolCallId": tool_call_id, "result": res_data}]}
+        return res_data
 
     cleaned_phone = digits[-10:]
     parsed_dob = parse_flexible_date(data.date_of_birth)
 
     if not parsed_dob:
-        return {
-            "success": False,
-            "patient": None,
-            "error": "Could not parse date_of_birth.",
-        }
+        res_data = {"success": False, "patient": None, "error": "Could not parse date_of_birth."}
+        if tool_call_id:
+            return {"results": [{"toolCallId": tool_call_id, "result": res_data}]}
+        return res_data
 
     existing_patient = db.scalar(
         select(Patient).where(
@@ -146,14 +136,16 @@ async def create_patient(request: Request, db: Session = Depends(get_db)):
     )
 
     if existing_patient:
-        return {
+        res_data = {
             "success": False,
             "patient": None,
             "error": "A patient with this phone number already exists.",
             "existing_patient_id": str(existing_patient.patient_id),
         }
+        if tool_call_id:
+            return {"results": [{"toolCallId": tool_call_id, "result": res_data}]}
+        return res_data
 
-    # Normalize state to 2-letter uppercase if possible
     clean_state = data.state.strip().upper()
     if len(clean_state) > 2:
         state_map = {"CALIFORNIA": "CA", "NEW YORK": "NY", "TEXAS": "TX"}
@@ -182,7 +174,7 @@ async def create_patient(request: Request, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(patient)
 
-    return {
+    res_data = {
         "success": True,
         "patient": {
             "patient_id": str(patient.patient_id),
@@ -192,3 +184,7 @@ async def create_patient(request: Request, db: Session = Depends(get_db)):
         },
         "error": None,
     }
+
+    if tool_call_id:
+        return {"results": [{"toolCallId": tool_call_id, "result": res_data}]}
+    return res_data
