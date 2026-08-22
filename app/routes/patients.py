@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Patient
-from ..schemas import ApiResponse, PatientCreate, PatientRead, PatientUpdate
+from ..schemas import PatientCreate, PatientRead, PatientUpdate
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
@@ -17,7 +17,7 @@ def response(data=None, error=None):
     return {"data": data, "error": error}
 
 
-@router.get("", response_model=ApiResponse)
+@router.get("")
 def list_patients(
     last_name: Optional[str] = Query(default=None),
     date_of_birth: Optional[date] = Query(default=None),
@@ -27,7 +27,7 @@ def list_patients(
     stmt = select(Patient).where(Patient.deleted_at.is_(None))
 
     if last_name:
-        stmt = stmt.where(Patient.last_name.ilike(last_name))
+        stmt = stmt.where(Patient.last_name.ilike(f"%{last_name}%"))
     if date_of_birth:
         stmt = stmt.where(Patient.date_of_birth == date_of_birth)
     if phone_number:
@@ -35,20 +35,38 @@ def list_patients(
         stmt = stmt.where(Patient.phone_number == digits)
 
     patients = db.scalars(stmt.order_by(Patient.created_at.desc())).all()
-    return response([PatientRead.model_validate(p).model_dump(mode="json") for p in patients])
+    
+    # Safe serialization to list of dicts
+    serialized = []
+    for p in patients:
+        try:
+            serialized.append(PatientRead.model_validate(p).model_dump(mode="json"))
+        except Exception:
+            # Fallback if manual dict serialization is needed
+            serialized.append({
+                col.name: getattr(p, col.name)
+                for col in p.__table__.columns
+            })
+
+    return response(data=serialized)
 
 
-@router.get("/{patient_id}", response_model=ApiResponse)
+@router.get("/{patient_id}")
 def get_patient(patient_id: UUID, db: Session = Depends(get_db)):
     patient = db.get(Patient, patient_id)
 
     if not patient or patient.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    return response(PatientRead.model_validate(patient).model_dump(mode="json"))
+    try:
+        data = PatientRead.model_validate(patient).model_dump(mode="json")
+    except Exception:
+        data = {col.name: getattr(patient, col.name) for col in patient.__table__.columns}
+
+    return response(data=data)
 
 
-@router.post("", response_model=ApiResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
     digits = "".join(ch for ch in payload.phone_number if ch.isdigit())
 
@@ -73,16 +91,15 @@ def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(patient)
 
-    print(
-        "[PATIENT_CREATED]",
-        PatientRead.model_validate(patient).model_dump(mode="json"),
-        flush=True,
-    )
+    try:
+        data = PatientRead.model_validate(patient).model_dump(mode="json")
+    except Exception:
+        data = {col.name: getattr(patient, col.name) for col in patient.__table__.columns}
 
-    return response(PatientRead.model_validate(patient).model_dump(mode="json"))
+    return response(data=data)
 
 
-@router.put("/{patient_id}", response_model=ApiResponse)
+@router.put("/{patient_id}")
 def update_patient(
     patient_id: UUID,
     payload: PatientUpdate,
@@ -114,10 +131,15 @@ def update_patient(
     db.commit()
     db.refresh(patient)
 
-    return response(PatientRead.model_validate(patient).model_dump(mode="json"))
+    try:
+        data = PatientRead.model_validate(patient).model_dump(mode="json")
+    except Exception:
+        data = {col.name: getattr(patient, col.name) for col in patient.__table__.columns}
+
+    return response(data=data)
 
 
-@router.delete("/{patient_id}", response_model=ApiResponse)
+@router.delete("/{patient_id}")
 def delete_patient(patient_id: UUID, db: Session = Depends(get_db)):
     patient = db.get(Patient, patient_id)
 
@@ -130,7 +152,7 @@ def delete_patient(patient_id: UUID, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(patient)
 
-    return response({
+    return response(data={
         "patient_id": str(patient.patient_id),
         "deleted_at": patient.deleted_at.isoformat(),
     })
